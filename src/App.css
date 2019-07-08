@@ -1,0 +1,33 @@
+.board-row:after {
+  clear: both;
+  content: "";
+  display: table;
+}
+.cell {
+  border-width: 3px;
+  border-style: solid;
+  border-color: white;
+  width: 100px;
+  height: 100px;
+}
+.green {
+  background-color: #C8CC7C;
+}
+.yellow {
+  background-color: #FFDD9E;
+}
+.orange {
+  background-color: #E27261;
+}
+.purple {
+  background-color: #844751;
+}
+.blue {
+  background-color: #557E93;
+}
+.hidden {
+  background-color: #CDD3CD;
+}
+.matched {
+  opacity: 0.5;
+}
