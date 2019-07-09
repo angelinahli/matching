@@ -13,6 +13,7 @@ code {
 /* from: https://getbootstrap.com/docs/4.1/examples/sticky-footer/
   sticky-footer.css */
 .footer {
+  background-color: white;
   position: absolute;
   bottom: 0;
   width: 100%;
