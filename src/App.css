@@ -1,3 +1,9 @@
+.app-container {
+  margin-top: 50px;
+}
+.status-container {
+  margin-bottom: 20px;
+}
 .board-row:after {
   clear: both;
   content: "";
@@ -10,24 +16,36 @@
   width: 100px;
   height: 100px;
 }
+/* color choices */
 .green {
-  background-color: #C8CC7C;
+  background-color: #93BD73;
 }
 .yellow {
   background-color: #FFDD9E;
 }
 .orange {
-  background-color: #E27261;
+  background-color: #E85F5C;
 }
-.purple {
+.burgundy {
   background-color: #844751;
+}
+.lilac {
+  background-color: #D4CBE5;
+}
+.cyan {
+  background-color: #86DFF5;
 }
 .blue {
   background-color: #557E93;
 }
+.mint {
+  background-color: #BBE1C3;
+}
+
+
 .hidden {
   background-color: #CDD3CD;
 }
 .matched {
-  opacity: 0.5;
+  background-color: white;
 }

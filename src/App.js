@@ -3,31 +3,59 @@ import './App.css';
 
 // random helper functions - seems like there should be a built in package
 
-function randomChoose(array) {
-  const index = Math.floor(Math.random() * array.length);
-  return array[index];
-}
-
-function randomShuffle(array) {
-  array.sort(() => Math.random() - 0.5);
-}
-
-// program helper functions
-
-const CELL_COLORS = ["green", "yellow", "orange", "purple", "blue"];
+const CELL_COLORS = ["green", "yellow", "orange", "burgundy", "lilac", "blue", "mint", "cyan"];
 const NUM_PAIRS = 8;
-const MATCH_SCORE_INCREMENT = 1;
+const MATCH_SCORE_INCREMENT = 5;
 const ERROR_SCORE_INCREMENT = -1;
+const TIMEOUT_INTERVAL = 750;
+
+const random = {
+  shuffle: function(array) {
+    // shuffles an array in place
+    array.sort(() => Math.random() - 0.5);
+  },
+  sample: function(array, n) {
+    // return a random sample from an array without repeats
+    var arrayClone = array.slice();
+    random.shuffle(arrayClone);
+    return arrayClone.slice(0, n);
+  }
+}
 
 class Cell extends React.Component {
+  // props: {color: ..., hidden: ..., matched: ..., onClick: ...}
   render() {
-    var cNameAttributes = ["cell"];
-    if(this.props.matched) { cNameAttributes.push("matched"); }
-    
-    if(this.props.hidden) { cNameAttributes.push("hidden"); }
-    else { cNameAttributes.push(this.props.color); }
+    if(this.props.matched) {
+      // render special disabled button
+      return <button className="cell matched" onClick={() => this.props.onClick()} disabled />
+    }
 
+    const viewColor = this.props.hidden ? "hidden" : this.props.color;
+    const cNameAttributes = ["cell", viewColor];
     return <button className={cNameAttributes.join(" ")} onClick={() => this.props.onClick()}/>
+  }
+}
+
+class RowContents extends React.Component {
+  // props: {startCell: ..., endCell: ..., renderCell: ...}
+  render() {
+    var elts = [];
+    for(let i = this.props.startCell; i <= this.props.endCell; i++) {
+      elts.push(this.props.renderCell(i));
+    }
+    return elts;
+  }
+}
+
+class ResetButton extends React.Component {
+  // props: {text: ..., onClick: ...}
+  render() {
+    return (
+      <button className="btn btn-outline-success btn-sm" 
+              onClick={() => this.props.onClick()}>
+        {this.props.text}
+      </button>
+    );
   }
 }
 
@@ -35,47 +63,65 @@ class Grid extends React.Component {
   constructor(props) {
     super(props);
     this.state = {
-      cells: this.getInitialCellData(this.props.numPairs),
+      cells: this.getNewCellData(this.props.numPairs),
       clickedCellIndices: [],
       score: 0,
-      numMatchedCells: 0
-    }
+      numMatchedCells: 0,
+      gameOver: false,
+      cellClickProcessing: false
+    };
   }
 
-  getInitialCellData(numPairs) {
+  getNewCellData(numPairs) {
     const allCellData = [];
+    const colors = random.sample(this.props.cellColors, numPairs);
     for(let i = 0; i < numPairs; i++) {
-      const chosenColor = randomChoose(this.props.cellColors);
+      const chosenColor = colors[i];
       allCellData.push({color: chosenColor, hidden: true, matched: false});
       allCellData.push({color: chosenColor, hidden: true, matched: false});
     }
-    randomShuffle(allCellData);
+    random.shuffle(allCellData);
     return allCellData;
   };
 
-  renderCell(i) {
-    const cellData = this.state.cells[i];
-    return <Cell color={cellData.color} 
-                 hidden={cellData.hidden} 
-                 matched={cellData.matched}
-                 onClick={() => this.handleClick(i)} />;
+  handleNewGameClick() {
+    // make cell clicks atomic; nothing happens until they are processed
+    if(this.state.cellClickProcessing) return;
+
+    this.setState({
+      cells: this.getNewCellData(this.props.numPairs),
+      clickedCellIndices: [],
+      score: 0,
+      numMatchedCells: 0,
+      gameOver: false,
+      cellClickProcessing: false
+    });
   }
 
-  handleClick(i) {
-    // hacky fix for matched cells
-    if(this.state.cells[i].matched || this.state.won) return;
-    else if(this.state.clickedCellIndices.length === 1) { this.handleSecondClick(i); }
-    else { this.handleFirstClick(i); }
+  handleCellClick(i) {
+    // make cell clicks atomic; nothing happens until they are processed
+    if(this.state.cellClickProcessing) return;
+    
+    this.setState({
+      cellClickProcessing: true
+    });
+
+    if(this.state.clickedCellIndices.length === 0) {
+      this.handleFirstClick(i);
+    } else {
+      this.handleSecondClick(i);
+    }
   }
 
   handleFirstClick(i) {
-    const currentCells = this.state.cells.slice();
-    // handle previously clicked cells
-    this.state.clickedCellIndices.map(
-      j => { if(!currentCells[j].matched) { currentCells[j].hidden = true; } })
-    // handle current cell
+    const currentCells = this.state.cells.slice();    
     currentCells[i].hidden = false;
-    this.setState({clickedCellIndices: [i], cells: currentCells});
+    this.setState({
+      gameStarted: true,
+      clickedCellIndices: [ i ], 
+      cells: currentCells,
+      cellClickProcessing: false
+    });
   }
 
   handleSecondClick(i) {
@@ -87,79 +133,122 @@ class Grid extends React.Component {
     newCell.hidden = false;
 
     // handle score state
-    const matched = newCell.color === prevCell.color;
-    let newScore = this.state.score;
-    let newMatchedCells = this.state.numMatchedCells;
+    const correctGuess = newCell.color === prevCell.color;
+    if(correctGuess) {
+      this.handleCorrectGuess(currentCells, prevCell, newCell);
+    } else {
+      this.handleIncorrectGuess(currentCells, prevCell, newCell);
+    }
+  }
 
-    if(matched) {
+  handleCorrectGuess(currentCells, prevCell, newCell) {
+    const newScore = this.state.score + this.props.correctScoreIncrement;
+    const newMatchedCells = this.state.numMatchedCells + 2;
+    const gameOver = newMatchedCells === this.props.numCells;
+    
+    this.setState({
+      clickedCellIndices: [],
+      score: newScore,
+      numMatchedCells: newMatchedCells,
+      gameOver: gameOver
+    });
+    
+    setTimeout(() => {
       prevCell.matched = true;
       newCell.matched = true;
-      newScore += this.props.matchScoreIncrement;
-      newMatchedCells += 2;
-    } else {
-      newScore += this.props.errorScoreIncrement;
-    }
+      this.setState({
+        cells: currentCells,
+        cellClickProcessing: false
+      });
+    }, this.props.timeoutInterval);
+  }
 
+  handleIncorrectGuess(currentCells, prevCell, newCell) {
+    const newScore = this.state.score + this.props.incorrectScoreIncrement;
     this.setState({
-      clickedCellIndices: [i, prevIndex], 
-      cells: currentCells, 
-      score: newScore, 
-      numMatchedCells: newMatchedCells});
+      clickedCellIndices: [],
+      score: newScore
+    });
+
+    setTimeout(() => {
+      newCell.hidden = true;
+      prevCell.hidden = true;
+      this.setState({
+        cells: currentCells,
+        cellClickProcessing: false
+      });
+    }, this.props.timeoutInterval);
   }
 
   render() {
-    const won = this.state.numMatchedCells === this.props.numCells;
-    if(won) {
-      var header = <h2>You Won! Final score: {this.state.score}</h2>;
+    var status;
+    if(this.state.gameOver) {
+      status = (
+        <div className="status-container">
+          <h2>Game Over!</h2>
+          <p className="lead">Final score: {this.state.score}</p>
+          <ResetButton text="Play Again" onClick={() => this.handleNewGameClick()} />
+        </div>
+      );
     } else {
-      var header = <h2>Score: {this.state.score}</h2>;
+      status = (
+        <div className="status-container">
+          <p className="lead">Score: {this.state.score}</p>
+          <ResetButton text="Restart" onClick={() => this.handleNewGameClick()} />
+        </div>
+      )
     }
 
     return (
-      <div className="grid-container">
-        { header }
-        <div className="board-row">
-          { this.renderCell(0) }
-          { this.renderCell(1) }
-          { this.renderCell(2) }
-          { this.renderCell(3) }
-        </div>
-        
-        <div className="board-row">
-          { this.renderCell(4) }
-          { this.renderCell(5) }
-          { this.renderCell(6) }
-          { this.renderCell(7) }
-        </div>
+      <div className="container">
+        <h1>
+          <span role="img" aria-label="men holding hands">👬</span>
+          Matching Pairs
+          <span role="img" aria-label="women holding hands">👭</span>
+        </h1>
 
-        <div className="board-row">
-          { this.renderCell(8) }
-          { this.renderCell(9) }
-          { this.renderCell(10) }
-          { this.renderCell(11) }
-        </div>
+        { status }
 
-        <div className="board-row">
-          { this.renderCell(12) }
-          { this.renderCell(13) }
-          { this.renderCell(14) }
-          { this.renderCell(15) }
+        <div className="grid-container">
+          { this.renderRow(0, 3) }
+          { this.renderRow(4, 7) }
+          { this.renderRow(8, 11) }
+          { this.renderRow(12, 15) }
         </div>
       </div>
     );
   }
+
+  renderRow(startCell, endCell) {
+    return (
+      <div className="board-row">
+        <RowContents startCell={startCell}
+                     endCell={endCell}
+                     renderCell={(i) => this.renderCell(i)} />
+      </div>
+    );
+  }
+
+  renderCell(i) {
+    const cellData = this.state.cells[i];
+    return <Cell color={cellData.color} 
+                 hidden={cellData.hidden} 
+                 matched={cellData.matched}
+                 onClick={() => this.handleCellClick(i)} />;
+  }
+
 }
 
 class App extends React.Component {
   render() {
     return (
-      <div className="container text-center">
-        <h1>Matching Pairs</h1>
+      <div className="app-container text-center">
         <Grid cellColors={CELL_COLORS} 
               numPairs={NUM_PAIRS} 
               numCells={NUM_PAIRS * 2}
-              matchScoreIncrement={MATCH_SCORE_INCREMENT} 
-              errorScoreIncrement={ERROR_SCORE_INCREMENT} />
+              correctScoreIncrement={MATCH_SCORE_INCREMENT} 
+              incorrectScoreIncrement={ERROR_SCORE_INCREMENT}
+              timeoutInterval={TIMEOUT_INTERVAL} />
       </div>
     )
   }
