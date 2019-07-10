@@ -1,200 +1,148 @@
 import React from 'react';
+import _ from 'lodash';
 import './App.css';
 
-// random helper functions - seems like there should be a built in package
-
-const CELL_COLORS = ["green", "yellow", "orange", "burgundy", "lilac", "blue", "mint", "cyan"];
+const CELL_COLORS = ["green", "yellow", "orange", "burgundy", "lilac", "blue", 
+                     "mint", "cyan"];
 const NUM_PAIRS = 8;
+const CELLS_PER_ROW = 4;
 const MATCH_SCORE_INCREMENT = 5;
 const ERROR_SCORE_INCREMENT = -1;
-const TIMEOUT_INTERVAL = 750;
-
-const random = {
-  shuffle: function(array) {
-    // shuffles an array in place
-    array.sort(() => Math.random() - 0.5);
-  },
-  sample: function(array, n) {
-    // return a random sample from an array without repeats
-    var arrayClone = array.slice();
-    random.shuffle(arrayClone);
-    return arrayClone.slice(0, n);
-  }
-}
-
-class Cell extends React.Component {
-  // props: {color: ..., hidden: ..., matched: ..., onClick: ...}
-  render() {
-    if(this.props.matched) {
-      // render special disabled button
-      return <button className="cell matched" onClick={() => this.props.onClick()} disabled />
-    }
-
-    const viewColor = this.props.hidden ? "hidden" : this.props.color;
-    const cNameAttributes = ["cell", viewColor];
-    return <button className={cNameAttributes.join(" ")} onClick={() => this.props.onClick()}/>
-  }
-}
-
-class RowContents extends React.Component {
-  // props: {startCell: ..., endCell: ..., renderCell: ...}
-  render() {
-    var elts = [];
-    for(let i = this.props.startCell; i <= this.props.endCell; i++) {
-      elts.push(this.props.renderCell(i));
-    }
-    return elts;
-  }
-}
-
-class ResetButton extends React.Component {
-  // props: {text: ..., onClick: ...}
-  render() {
-    return (
-      <button className="btn btn-outline-success btn-sm" 
-              onClick={() => this.props.onClick()}>
-        {this.props.text}
-      </button>
-    );
-  }
-}
+const TIMEOUT_INTERVAL = 500;
 
 class Grid extends React.Component {
   constructor(props) {
     super(props);
     this.state = {
       cells: this.getNewCellData(this.props.numPairs),
-      clickedCellIndices: [],
+      clickedCells: [],
       score: 0,
       numMatchedCells: 0,
       gameOver: false,
-      cellClickProcessing: false
+      locked: false
     };
   }
 
   getNewCellData(numPairs) {
     const allCellData = [];
-    const colors = random.sample(this.props.cellColors, numPairs);
+    const colors = _.sampleSize(this.props.cellColors, numPairs);
     for(let i = 0; i < numPairs; i++) {
       const chosenColor = colors[i];
       allCellData.push({color: chosenColor, hidden: true, matched: false});
       allCellData.push({color: chosenColor, hidden: true, matched: false});
     }
-    random.shuffle(allCellData);
-    return allCellData;
+    return _.shuffle(allCellData);
   };
 
   handleNewGameClick() {
-    // make cell clicks atomic; nothing happens until they are processed
-    if(this.state.cellClickProcessing) return;
-
+    if(this.state.locked) return;
     this.setState({
       cells: this.getNewCellData(this.props.numPairs),
-      clickedCellIndices: [],
+      clickedCells: [],
       score: 0,
       numMatchedCells: 0,
       gameOver: false,
-      cellClickProcessing: false
+      locked: false
     });
   }
 
   handleCellClick(i) {
-    // make cell clicks atomic; nothing happens until they are processed
-    if(this.state.cellClickProcessing) return;
-    
-    this.setState({
-      cellClickProcessing: true
-    });
+    if(this.state.locked) return;
 
-    if(this.state.clickedCellIndices.length === 0) {
+    if(this.state.clickedCells.length === 0) { 
       this.handleFirstClick(i);
-    } else {
+    } else { 
       this.handleSecondClick(i);
     }
   }
 
   handleFirstClick(i) {
-    const currentCells = this.state.cells.slice();    
-    currentCells[i].hidden = false;
+    const cellsCopy = this.state.cells.slice();    
+    cellsCopy[i].hidden = false;
     this.setState({
-      gameStarted: true,
-      clickedCellIndices: [ i ], 
-      cells: currentCells,
-      cellClickProcessing: false
+      clickedCells: [ i ], 
+      cells: cellsCopy
     });
   }
 
   handleSecondClick(i) {
-    const currentCells = this.state.cells.slice();
-    const newCell = currentCells[i];
-    const prevIndex = this.state.clickedCellIndices[0];
-    const prevCell = currentCells[prevIndex];
-    // handle default actions
-    newCell.hidden = false;
+    // silently reject click if the two cells are the same
+    const prevIndex = this.state.clickedCells[0];
+    if(i === prevIndex) { return; }
 
-    // handle score state
-    const correctGuess = newCell.color === prevCell.color;
-    if(correctGuess) {
-      this.handleCorrectGuess(currentCells, prevCell, newCell);
+    this.setState({ locked: true });
+
+    const cellsCopy = this.state.cells.slice();
+    cellsCopy[i].hidden = false;
+    this.setState({ cells: cellsCopy });
+
+    const prevCell = this.state.cells[prevIndex];
+    const newCell = this.state.cells[i];
+    const guessedCorrectly = newCell.color === prevCell.color;
+
+    if(guessedCorrectly) {
+      this.handleCorrectGuess(i, prevIndex);
     } else {
-      this.handleIncorrectGuess(currentCells, prevCell, newCell);
+      this.handleIncorrectGuess(i, prevIndex);
     }
   }
 
-  handleCorrectGuess(currentCells, prevCell, newCell) {
+  handleCorrectGuess(newIndex, prevIndex) {
     const newScore = this.state.score + this.props.correctScoreIncrement;
     const newMatchedCells = this.state.numMatchedCells + 2;
     const gameOver = newMatchedCells === this.props.numCells;
     
     this.setState({
-      clickedCellIndices: [],
+      clickedCells: [],
       score: newScore,
       numMatchedCells: newMatchedCells,
       gameOver: gameOver
     });
     
     setTimeout(() => {
-      prevCell.matched = true;
-      newCell.matched = true;
+      const cellsCopy = this.state.cells.slice();
+      cellsCopy[prevIndex].matched = true;
+      cellsCopy[newIndex].matched = true;
       this.setState({
-        cells: currentCells,
-        cellClickProcessing: false
+        cells: cellsCopy,
+        locked: false
       });
     }, this.props.timeoutInterval);
   }
 
-  handleIncorrectGuess(currentCells, prevCell, newCell) {
+  handleIncorrectGuess(newIndex, prevIndex) {
     const newScore = this.state.score + this.props.incorrectScoreIncrement;
     this.setState({
-      clickedCellIndices: [],
+      clickedCells: [],
       score: newScore
     });
 
     setTimeout(() => {
-      newCell.hidden = true;
-      prevCell.hidden = true;
+      const cellsCopy = this.state.cells.slice();
+      cellsCopy[prevIndex].hidden = true;
+      cellsCopy[newIndex].hidden = true;
       this.setState({
-        cells: currentCells,
-        cellClickProcessing: false
+        cells: cellsCopy,
+        locked: false
       });
     }, this.props.timeoutInterval);
   }
 
   render() {
-    var status;
+    let status;
     if(this.state.gameOver) {
       status = (
         <div className="status-container">
           <h2>Game Over!</h2>
           <p className="lead">Final score: {this.state.score}</p>
-          <ResetButton text="Play Again" onClick={() => this.handleNewGameClick()} />
+          { this.renderResetButton("Play Again") }
         </div>
       );
     } else {
       status = (
         <div className="status-container">
           <p className="lead">Score: {this.state.score}</p>
-          <ResetButton text="Restart" onClick={() => this.handleNewGameClick()} />
+          { this.renderResetButton("New Game") }
         </div>
       )
     }
@@ -208,44 +156,67 @@ class Grid extends React.Component {
         </h1>
 
         { status }
+        { this.renderGrid() }
 
-        <div className="grid-container">
-          { this.renderRow(0, 3) }
-          { this.renderRow(4, 7) }
-          { this.renderRow(8, 11) }
-          { this.renderRow(12, 15) }
-        </div>
+      </div>
+    );
+  }
+
+  renderGrid() {
+    let rows = [];
+    for(let i = 0; i < this.props.numCells; i += this.props.cellsPerRow) {
+      rows.push(this.renderRow(i, i + this.props.cellsPerRow - 1));
+    }
+    return (
+      <div className="grid-container">
+        { rows }
       </div>
     );
   }
 
   renderRow(startCell, endCell) {
+    let rowElements = [];
+    for(let i = startCell; i <= endCell; i++) {
+      rowElements.push(this.renderCell(i));
+    }
     return (
-      <div className="board-row">
-        <RowContents startCell={startCell}
-                     endCell={endCell}
-                     renderCell={(i) => this.renderCell(i)} />
+      <div className="board-row" key={ "row" + startCell + "_" + endCell }>
+        { rowElements }
       </div>
     );
   }
 
   renderCell(i) {
     const cellData = this.state.cells[i];
-    return <Cell color={cellData.color} 
-                 hidden={cellData.hidden} 
-                 matched={cellData.matched}
-                 onClick={() => this.handleCellClick(i)} />;
+    if(cellData.matched) {
+      // render special disabled button
+      return <button key={ i } className="cell matched" disabled />
+    }
+    const viewColor = cellData.hidden ? "hidden" : cellData.color;
+    const classNames = ["cell", viewColor];
+    return <button key={ "cell" + i }
+                   className={classNames.join(" ")} 
+                   onClick={() => this.handleCellClick(i)}/>
   }
 
+  renderResetButton(text) {
+    return (
+      <button className="btn btn-outline-success btn-sm" 
+              onClick={() => this.handleNewGameClick()}>
+        { text }
+      </button>
+    );
+  }
 }
 
 class App extends React.Component {
   render() {
     return (
-      <div className="app-container text-center">
+      <div className="container app-container text-center">
         <Grid cellColors={CELL_COLORS} 
               numPairs={NUM_PAIRS} 
               numCells={NUM_PAIRS * 2}
+              cellsPerRow={CELLS_PER_ROW}
               correctScoreIncrement={MATCH_SCORE_INCREMENT} 
               incorrectScoreIncrement={ERROR_SCORE_INCREMENT}
               timeoutInterval={TIMEOUT_INTERVAL} />
