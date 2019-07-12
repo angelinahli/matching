@@ -13,7 +13,11 @@ const TIMEOUT_INTERVAL = 500;
 class Grid extends React.Component {
   constructor(props) {
     super(props);
-    this.state = {
+    this.state = this.getInitState();
+  }
+
+  getInitState() {
+    return {
       cells: this.getNewCellData(this.props.numPairs),
       clickedCells: [],
       score: 0,
@@ -36,14 +40,7 @@ class Grid extends React.Component {
 
   handleNewGameClick() {
     if(this.state.locked) return;
-    this.setState({
-      cells: this.getNewCellData(this.props.numPairs),
-      clickedCells: [],
-      score: 0,
-      numMatchedCells: 0,
-      gameOver: false,
-      locked: false
-    });
+    this.setState(this.getInitState());
   }
 
   handleCellClick(i) {
@@ -129,24 +126,6 @@ class Grid extends React.Component {
   }
 
   render() {
-    let status;
-    if(this.state.gameOver) {
-      status = (
-        <div className="status-container">
-          <h2>Game Over!</h2>
-          <p className="lead">Final score: {this.state.score}</p>
-          { this.renderResetButton("Play Again") }
-        </div>
-      );
-    } else {
-      status = (
-        <div className="status-container">
-          <p className="lead">Score: {this.state.score}</p>
-          { this.renderResetButton("New Game") }
-        </div>
-      )
-    }
-
     return (
       <div className="container">
         <h1>
@@ -155,11 +134,30 @@ class Grid extends React.Component {
           <span role="img" aria-label="women holding hands">👭</span>
         </h1>
 
-        { status }
+        { this.renderStatusContainer() }
         { this.renderGrid() }
 
       </div>
     );
+  }
+
+  renderStatusContainer() {
+    if(this.state.gameOver) {
+     return (
+        <div className="status-container">
+          <h2>Game Over!</h2>
+          <p className="lead">Final score: {this.state.score}</p>
+          { this.renderResetButton("Play Again") }
+        </div>
+      );
+    } else {
+      return (
+        <div className="status-container">
+          <p className="lead">Score: {this.state.score}</p>
+          { this.renderResetButton("New Game") }
+        </div>
+      );
+    }
   }
 
   renderGrid() {
@@ -190,7 +188,7 @@ class Grid extends React.Component {
     const cellData = this.state.cells[i];
     if(cellData.matched) {
       // render special disabled button
-      return <button key={ i } className="cell matched" disabled />
+      return <button key={ "cell" + i } className="cell matched" disabled />
     }
     const viewColor = cellData.hidden ? "hidden" : cellData.color;
     const classNames = ["cell", viewColor];
