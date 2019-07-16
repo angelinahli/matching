@@ -212,7 +212,7 @@ class Grid extends React.Component {
 
   renderResetButton(text) {
     return (
-      <button className="btn btn-success btn-sm" 
+      <button className="btn btn-success" 
               onClick={() => this.handleNewGameClick()}>
         { text }
       </button>
