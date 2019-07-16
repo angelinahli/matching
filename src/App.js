@@ -167,7 +167,7 @@ class Grid extends React.Component {
      return (
         <div className="status-container">
           <h2>Game Over!</h2>
-          <p className="lead">Final score: <b>{this.state.score}</b></p>
+          <p className="lead">Final score: <b>{this.state.score}/{this.props.numPairs * this.props.correctScoreIncrement}</b></p>
           { this.renderResetButton("Play Again") }
         </div>
       );
