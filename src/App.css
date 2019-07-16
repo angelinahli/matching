@@ -4,17 +4,21 @@
 .status-container {
   margin-bottom: 20px;
 }
+.grid-container {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-gap: 6px;
+}
 .board-row:after {
   clear: both;
   content: "";
   display: table;
 }
 .cell {
-  border-width: 3px;
-  border-style: solid;
-  border-color: white;
-  width: 100px;
-  height: 100px;
+  border-width: 0px;
+  padding-top: 100%;
+  background-size: 100% 100%;
 }
 /* color choices */
 .green {
@@ -41,8 +45,6 @@
 .mint {
   background-color: #BBE1C3;
 }
-
-
 .hidden {
   background-color: #CDD3CD;
 }

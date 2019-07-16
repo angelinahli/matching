@@ -10,6 +10,25 @@ const MATCH_SCORE_INCREMENT = 5;
 const ERROR_SCORE_INCREMENT = -1;
 const TIMEOUT_INTERVAL = 500;
 
+const cellMode = {
+  HIDDEN: "hidden",
+  MATCHED: "matched",
+  VISIBLE: "visible"
+}
+
+const gameMode = {
+  INPLAY: "in play",
+  GAMEOVER: "game over",
+  LOCKED: "locked"
+}
+
+class Cell {
+  constructor(color) {
+    this.color = color;
+    this.mode = cellMode.HIDDEN;
+  }
+}
+
 class Grid extends React.Component {
   constructor(props) {
     super(props);
@@ -19,11 +38,10 @@ class Grid extends React.Component {
   getInitState() {
     return {
       cells: this.getNewCellData(this.props.numPairs),
-      clickedCells: [],
+      visibleCells: [],
       score: 0,
       numMatchedCells: 0,
-      gameOver: false,
-      locked: false
+      mode: gameMode.INPLAY
     };
   }
 
@@ -32,52 +50,56 @@ class Grid extends React.Component {
     const colors = _.sampleSize(this.props.cellColors, numPairs);
     for(let i = 0; i < numPairs; i++) {
       const chosenColor = colors[i];
-      allCellData.push({color: chosenColor, hidden: true, matched: false});
-      allCellData.push({color: chosenColor, hidden: true, matched: false});
+      allCellData.push(new Cell(chosenColor));
+      allCellData.push(new Cell(chosenColor));
     }
     return _.shuffle(allCellData);
   };
 
   handleNewGameClick() {
-    if(this.state.locked) return;
+    // only handle if appropriate; ignore otherwise
+    if(this.state.mode === gameMode.LOCKED) return;
     this.setState(this.getInitState());
   }
 
   handleCellClick(i) {
-    if(this.state.locked) return;
+    // only handle if appropriate; ignore otherwise
+    if(this.state.mode !== gameMode.INPLAY) return;
 
-    if(this.state.clickedCells.length === 0) { 
+    if(this.state.visibleCells.length === 0) { 
       this.handleFirstClick(i);
     } else { 
-      this.handleSecondClick(i);
+      this.setState(
+        // game must be locked first
+        { mode: gameMode.LOCKED },
+        () => this.handleSecondClick(i));
     }
   }
 
   handleFirstClick(i) {
-    const cellsCopy = this.state.cells.slice();    
-    cellsCopy[i].hidden = false;
-    this.setState({
-      clickedCells: [ i ], 
-      cells: cellsCopy
-    });
+    this.setState({ visibleCells: [ i ] });
+    this.changeCellMode(i, cellMode.VISIBLE);
+  }
+
+  changeCellMode(i, newMode) {
+    this.setState(
+      (prevState, props) => {
+        const cellsCopy = prevState.cells.slice();
+        cellsCopy[i].mode = newMode;
+        return { cells: cellsCopy };
+      }
+    );
   }
 
   handleSecondClick(i) {
-    // silently reject click if the two cells are the same
-    const prevIndex = this.state.clickedCells[0];
-    if(i === prevIndex) { return; }
+    this.changeCellMode(i, cellMode.VISIBLE);
 
-    this.setState({ locked: true });
-
-    const cellsCopy = this.state.cells.slice();
-    cellsCopy[i].hidden = false;
-    this.setState({ cells: cellsCopy });
-
+    const prevIndex = this.state.visibleCells[0];
     const prevCell = this.state.cells[prevIndex];
     const newCell = this.state.cells[i];
-    const guessedCorrectly = newCell.color === prevCell.color;
+    const correctGuess = newCell.color === prevCell.color;
 
-    if(guessedCorrectly) {
+    if(correctGuess) {
       this.handleCorrectGuess(i, prevIndex);
     } else {
       this.handleIncorrectGuess(i, prevIndex);
@@ -85,53 +107,52 @@ class Grid extends React.Component {
   }
 
   handleCorrectGuess(newIndex, prevIndex) {
-    const newScore = this.state.score + this.props.correctScoreIncrement;
-    const newMatchedCells = this.state.numMatchedCells + 2;
-    const gameOver = newMatchedCells === this.props.numCells;
-    
-    this.setState({
-      clickedCells: [],
-      score: newScore,
-      numMatchedCells: newMatchedCells,
-      gameOver: gameOver
-    });
+    this.setState(
+      (prevState, props) => {
+        const newMatchedCells = prevState.numMatchedCells + 2;
+        const gameOver = newMatchedCells === props.numCells;
+        const newMode = gameOver ? gameMode.GAMEOVER : prevState.mode;
+        return {
+          visibleCells: [],
+          score: prevState.score + props.correctScoreIncrement,
+          numVisible: prevState.numVisible + 1,
+          numMatchedCells: newMatchedCells,
+          mode: newMode
+        }
+      }
+    );
     
     setTimeout(() => {
-      const cellsCopy = this.state.cells.slice();
-      cellsCopy[prevIndex].matched = true;
-      cellsCopy[newIndex].matched = true;
-      this.setState({
-        cells: cellsCopy,
-        locked: false
-      });
+        this.changeCellMode(prevIndex, cellMode.MATCHED);
+        this.changeCellMode(newIndex, cellMode.MATCHED);
+        this.setState(
+          (prevState, props) => ({ 
+            mode: prevState.mode === gameMode.GAMEOVER ? gameMode.GAMEOVER : gameMode.INPLAY
+          })
+        );
     }, this.props.timeoutInterval);
   }
 
   handleIncorrectGuess(newIndex, prevIndex) {
-    const newScore = this.state.score + this.props.incorrectScoreIncrement;
-    this.setState({
-      clickedCells: [],
-      score: newScore
-    });
+    this.setState(
+      (prevState, props) => ({
+        visibleCells: [],
+        score: prevState.score + props.incorrectScoreIncrement
+      })
+    );
 
     setTimeout(() => {
-      const cellsCopy = this.state.cells.slice();
-      cellsCopy[prevIndex].hidden = true;
-      cellsCopy[newIndex].hidden = true;
-      this.setState({
-        cells: cellsCopy,
-        locked: false
-      });
+      this.changeCellMode(prevIndex, cellMode.HIDDEN);
+      this.changeCellMode(newIndex, cellMode.HIDDEN);
+      this.setState({ mode: gameMode.INPLAY });
     }, this.props.timeoutInterval);
   }
 
   render() {
     return (
-      <div className="container">
+      <div className="app-container text-center container">
         <h1>
-          <span role="img" aria-label="men holding hands">👬</span>
-          Matching Pairs
-          <span role="img" aria-label="women holding hands">👭</span>
+          👬 Matching Pairs 👭
         </h1>
 
         { this.renderStatusContainer() }
@@ -142,18 +163,18 @@ class Grid extends React.Component {
   }
 
   renderStatusContainer() {
-    if(this.state.gameOver) {
+    if(this.state.mode === gameMode.GAMEOVER) {
      return (
         <div className="status-container">
           <h2>Game Over!</h2>
-          <p className="lead">Final score: {this.state.score}</p>
+          <p className="lead">Final score: <b>{this.state.score}</b></p>
           { this.renderResetButton("Play Again") }
         </div>
       );
     } else {
       return (
         <div className="status-container">
-          <p className="lead">Score: {this.state.score}</p>
+          <p className="lead">Score: <b>{this.state.score}</b></p>
           { this.renderResetButton("New Game") }
         </div>
       );
@@ -161,45 +182,37 @@ class Grid extends React.Component {
   }
 
   renderGrid() {
-    let rows = [];
-    for(let i = 0; i < this.props.numCells; i += this.props.cellsPerRow) {
-      rows.push(this.renderRow(i, i + this.props.cellsPerRow - 1));
+    const gridElements = [];
+    for(let i = 0; i < this.props.numCells; i++) {
+      gridElements.push(this.renderCell(i));
     }
-    return (
-      <div className="grid-container">
-        { rows }
-      </div>
-    );
-  }
 
-  renderRow(startCell, endCell) {
-    let rowElements = [];
-    for(let i = startCell; i <= endCell; i++) {
-      rowElements.push(this.renderCell(i));
-    }
     return (
-      <div className="board-row" key={ "row" + startCell + "_" + endCell }>
-        { rowElements }
+      <div className="container grid-container">
+        { gridElements }
       </div>
     );
   }
 
   renderCell(i) {
     const cellData = this.state.cells[i];
-    if(cellData.matched) {
-      // render special disabled button
-      return <button key={ "cell" + i } className="cell matched" disabled />
+    const key = "cell" + i;
+    switch(cellData.mode) {
+      case cellMode.MATCHED: {
+        return <button key={ key } className="cell matched" disabled />;
+      }
+      case cellMode.VISIBLE: {
+        return <button key={ key } className={ "cell " + cellData.color } disabled />;
+      }
+      case cellMode.HIDDEN: {
+        return <button key={ key } className="cell hidden" onClick={() => this.handleCellClick(i)} />;
+      }
     }
-    const viewColor = cellData.hidden ? "hidden" : cellData.color;
-    const classNames = ["cell", viewColor];
-    return <button key={ "cell" + i }
-                   className={classNames.join(" ")} 
-                   onClick={() => this.handleCellClick(i)}/>
   }
 
   renderResetButton(text) {
     return (
-      <button className="btn btn-outline-success btn-sm" 
+      <button className="btn btn-success btn-sm" 
               onClick={() => this.handleNewGameClick()}>
         { text }
       </button>
@@ -210,15 +223,26 @@ class Grid extends React.Component {
 class App extends React.Component {
   render() {
     return (
-      <div className="container app-container text-center">
-        <Grid cellColors={CELL_COLORS} 
-              numPairs={NUM_PAIRS} 
-              numCells={NUM_PAIRS * 2}
-              cellsPerRow={CELLS_PER_ROW}
-              correctScoreIncrement={MATCH_SCORE_INCREMENT} 
-              incorrectScoreIncrement={ERROR_SCORE_INCREMENT}
-              timeoutInterval={TIMEOUT_INTERVAL} />
+      <div className="container">
+        <div className="row">
+
+          <div className="col-lg-3 col-md-2" />
+
+          <div className="col-lg-6 col-md-8">
+            <Grid cellColors={CELL_COLORS} 
+                  numPairs={NUM_PAIRS} 
+                  numCells={NUM_PAIRS * 2}
+                  cellsPerRow={CELLS_PER_ROW}
+                  correctScoreIncrement={MATCH_SCORE_INCREMENT} 
+                  incorrectScoreIncrement={ERROR_SCORE_INCREMENT}
+                  timeoutInterval={TIMEOUT_INTERVAL} />
+          </div>
+
+          <div className="col-lg-3 col-md-2" />
+
+        </div>
       </div>
+      
     )
   }
 }
